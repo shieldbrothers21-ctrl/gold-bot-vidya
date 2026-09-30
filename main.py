@@ -8,10 +8,10 @@ def get_env_any(*names):
             return all_env[n.lower()]
     return None
 
-TOKEN = get_env_any("TOKEN","TELEGRAM_TOKEN","TELEGRAM_BOT_TOKEN","TELEGRA","TELEGRAM","BOT_TOKEN")
+TOKEN = get_env_any("TOKEN","TELEGRAM_TOKEN","TELEGRAM_BOT_TOKEN","TELEGRAM","BOT_TOKEN","TELEGRA")
 CHAT_ID = get_env_any("CHAT_ID","TELEGRAM_CHAT_ID")
 
-print(f"TOKEN {bool(TOKEN)} CHAT {bool(CHAT_ID)} - NO API KEY MODE PAXG")
+print(f"TOKEN {bool(TOKEN)} CHAT {bool(CHAT_ID)} - PAXG FIX V2")
 
 def send(msg):
     try:
@@ -21,24 +21,36 @@ def send(msg):
         print(f"TG err {e}")
 
 def get_candles():
-    # Binance PAXGUSDT = GOLD price, no key needed
-    try:
-        url = "https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100"
-        data = requests.get(url, timeout=15).json()
-        # data = [[openTime, open, high, low, close...],...]
-        candles = []
-        for d in data:
-            candles.append({
-                "open": float(d[1]),
-                "high": float(d[2]),
-                "low": float(d[3]),
-                "close": float(d[4])
-            })
-        print(f"Got {len(candles)} PAXG candles price {candles[-1]['close']}")
-        return candles
-    except Exception as e:
-        print(f"PAXG error {e}")
-        return None
+    urls = [
+        "https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100",
+        "https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100"
+    ]
+    headers = {"User-Agent": "Mozilla/5.0"}
+    for url in urls:
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            print(f"Trying {url} status {r.status_code} len {len(r.text)}")
+            if r.status_code!= 200:
+                continue
+            data = r.json()
+            if not isinstance(data, list) or len(data) < 20:
+                print(f"Bad data {str(data)[:200]}")
+                continue
+            candles = []
+            for d in data:
+                candles.append({
+                    "open": float(d[1]),
+                    "high": float(d[2]),
+                    "low": float(d[3]),
+                    "close": float(d[4])
+                })
+            print(f"Got {len(candles)} candles price {candles[-1]['close']}")
+            return candles
+        except Exception as e:
+            print(f"URL fail {url} err {e}")
+            continue
+    print("All PAXG URLs failed")
+    return None
 
 def calc_vidya(closes, period=20):
     v=[]
@@ -61,15 +73,15 @@ def check(closes,highs,lows,vidya):
     if prev<prev_v and curr>curr_v and curr>lh and now-last["BUY"]>1800:
         entry=curr+0.6; sl=slw-0.5
         if entry-sl>10: sl=entry-9.5
-        send(f"🔥 GOLD ONANA BULLISH VIDYA BOUNCE + BOS\nReclaim {prev_v:.2f}->{curr:.2f} Break {lh:.2f}\n\n✅ ENTRY: {entry:.2f} GOLD SPOT\n🛑 SL: {sl:.2f} (-${entry-sl:.1f})\n🎯 TP1: {entry+6:.2f} (+$6) 30%\n🎯 TP2: {entry+11:.2f} (+$11) 30%\n🎯 TP3: {nh:.2f} Liq\nPAXG Gold - No spam - No auto BE")
+        send(f"🔥 GOLD ONANA BULLISH VIDYA BOUNCE + BOS\nReclaim {prev_v:.2f}->{curr:.2f} Break {lh:.2f}\n\n✅ ENTRY: {entry:.2f}\n🛑 SL: {sl:.2f} (-${entry-sl:.1f})\n🎯 TP1: {entry+6:.2f} (+$6) 30%\n🎯 TP2: {entry+11:.2f} (+$11) 30%\n🎯 TP3: {nh:.2f} Liq")
         last["BUY"]=now
     if prev>prev_v and curr<curr_v and curr<ll and now-last["SELL"]>1800:
         entry=curr-0.6; sl=shw+0.5
         if sl-entry>10: sl=entry+9.5
-        send(f"🔥 GOLD ONANA BEARISH VIDYA BREAKDOWN\nBreak {prev_v:.2f}->{curr:.2f} Break {ll:.2f}\n\n❌ ENTRY: {entry:.2f} GOLD SPOT\n🛑 SL: {sl:.2f} (+${sl-entry:.1f})\n🎯 TP1: {entry-6:.2f} 30%\n🎯 TP2: {entry-11:.2f} 30%\n🎯 TP3: {nl:.2f} Liq\nPAXG Gold - No spam")
+        send(f"🔥 GOLD ONANA BEARISH BREAKDOWN\nBreak {prev_v:.2f}->{curr:.2f} Break {ll:.2f}\n\n❌ ENTRY: {entry:.2f}\n🛑 SL: {sl:.2f} (+${sl-entry:.1f})\n🎯 TP1: {entry-6:.2f} 30%\n🎯 TP2: {entry-11:.2f} 30%\n🎯 TP3: {nl:.2f} Liq")
         last["SELL"]=now
 
-send("✅ V6 BOT ONLINE - PAXG GOLD - NO API KEY NEEDED\nBUY + SELL WORKING - Will signal at 4157 bounce")
+send("✅ V6 PAXG FIX V2 ONLINE\nBUY+SELL WORKING - Checking 4159 break")
 
 while True:
     try:
@@ -78,8 +90,4 @@ while True:
             time.sleep(60); continue
         closes=[x["close"] for x in vals]; highs=[x["high"] for x in vals]; lows=[x["low"] for x in vals]
         vidya=calc_vidya(closes)
-        print(f"{datetime.now().strftime('%H:%M')} Price {closes[-1]:.2f} VIDYA {vidya[-1]:.2f}")
-        check(closes,highs,lows,vidya)
-        time.sleep(60)
-    except Exception as e:
-        print(f"Loop {e}"); time.sleep(60)
+        print(f"{datetime.now().strftime('%H:%M')} Price {closes[-1]:.2
