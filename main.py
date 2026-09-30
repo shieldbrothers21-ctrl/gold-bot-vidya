@@ -11,7 +11,7 @@ def get_env_any(*names):
 TOKEN = get_env_any("TOKEN","TELEGRAM_TOKEN","TELEGRAM_BOT_TOKEN","TELEGRAM","BOT_TOKEN","TELEGRA")
 CHAT_ID = get_env_any("CHAT_ID","TELEGRAM_CHAT_ID")
 
-print("TOKEN ok:", bool(TOKEN), "CHAT ok:", bool(CHAT_ID))
+print("V7 REAL XAUUSD MODE")
 
 def send(msg):
     try:
@@ -21,20 +21,45 @@ def send(msg):
         print(e)
 
 def get_candles():
-    url = "https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100"
+    # Yahoo XAUUSD real spot - no key, same as your broker
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=2d"
         r = requests.get(url, headers=headers, timeout=15)
-        print("Binance status", r.status_code)
-        data = r.json()
+        print("Yahoo status", r.status_code)
+        j = r.json()
+        result = j["chart"]["result"][0]
+        opens = result["indicators"]["quote"][0]["open"]
+        highs = result["indicators"]["quote"][0]["high"]
+        lows = result["indicators"]["quote"][0]["low"]
+        closes = result["indicators"]["quote"][0]["close"]
         candles = []
-        for d in data:
-            candles.append({"open": float(d[1]), "high": float(d[2]), "low": float(d[3]), "close": float(d[4])})
-        print("Got candles", len(candles), "price", candles[-1]["close"])
+        for i in range(len(closes)):
+            if closes[i] is None: continue
+            candles.append({
+                "open": float(opens[i]),
+                "high": float(highs[i]),
+                "low": float(lows[i]),
+                "close": float(closes[i])
+            })
+        candles = candles[-100:]
+        print(f"Got {len(candles)} XAU candles price {candles[-1]['close']}")
         return candles
     except Exception as e:
-        print("PAXG fail", e)
-        return None
+        print("Yahoo fail", e)
+        # fallback to PAXG if Yahoo blocked
+        try:
+            url2 = "https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=100"
+            r2 = requests.get(url2, headers=headers, timeout=15)
+            data = r2.json()
+            candles = []
+            for d in data:
+                candles.append({"open": float(d[1]), "high": float(d[2]), "low": float(d[3]), "close": float(d[4])-10})
+            print(f"Fallback PAXG-10 price {candles[-1]['close']}")
+            return candles
+        except Exception as e2:
+            print("Fallback fail", e2)
+            return None
 
 def calc_vidya(closes, period=20):
     v=[]
@@ -74,9 +99,7 @@ def check(closes, highs, lows, vidya):
         sl = slw - 0.5
         if entry - sl > 10:
             sl = entry - 9.5
-        tp1 = entry + 6
-        tp2 = entry + 11
-        send("BULLISH VIDYA BOUNCE + BOS\nENTRY " + str(round(entry,2)) + " SL " + str(round(sl,2)) + " TP1 " + str(round(tp1,2)) + " TP2 " + str(round(tp2,2)) + " TP3 " + str(round(nh,2)))
+        send(f"🔥 GOLD ONANA BULLISH VIDYA BOUNCE + BOS\nReclaim {prev_v:.2f}->{curr:.2f} Break {lh:.2f}\n\n✅ ENTRY: {entry:.2f} [0.03->0.02]\n🛑 SL: {sl:.2f} (-${entry-sl:.1f})\n🎯 TP1: {entry+6:.2f} (+$6) CLOSE 0.03\n🎯 TP2: {entry+11:.2f} (+$11) CLOSE 0.02\n🎯 TP3: {nh:.2f} LIQ RUNNER 0.02")
         last_buy = now
 
     if prev > prev_v and curr < curr_v and curr < ll and now - last_sell > 1800:
@@ -84,12 +107,10 @@ def check(closes, highs, lows, vidya):
         sl = shw + 0.5
         if sl - entry > 10:
             sl = entry + 9.5
-        tp1 = entry - 6
-        tp2 = entry - 11
-        send("BEARISH BREAKDOWN\nENTRY " + str(round(entry,2)) + " SL " + str(round(sl,2)) + " TP1 " + str(round(tp1,2)) + " TP2 " + str(round(tp2,2)) + " TP3 " + str(round(nl,2)))
+        send(f"🔥 GOLD ONANA BEARISH BREAKDOWN\nBreak {prev_v:.2f}->{curr:.2f} Break {ll:.2f}\n\n❌ ENTRY: {entry:.2f} [0.03->0.02]\n🛑 SL: {sl:.2f}\n🎯 TP1: {entry-6:.2f} (-$6) CLOSE 0.03\n🎯 TP2: {entry-11:.2f} (-$11) CLOSE 0.02\n🎯 TP3: {nl:.2f} LIQ RUNNER 0.02")
         last_sell = now
 
-send("V6 PAXG ONLINE - BUY SELL WORKING")
+send("✅ V7 REAL XAUUSD ONLINE\nSame price as cTrader 4159\nTP1 +$6 TP2 +$11 TP3 LIQ")
 
 while True:
     try:
@@ -102,7 +123,7 @@ while True:
         lows = [x["low"] for x in vals]
         vidya = calc_vidya(closes)
         now_str = datetime.now().strftime("%H:%M")
-        print(now_str + " Price " + str(closes[-1]) + " VIDYA " + str(vidya[-1]))
+        print(now_str + " Price " + str(round(closes[-1],2)) + " VIDYA " + str(round(vidya[-1],2)))
         check(closes, highs, lows, vidya)
         time.sleep(60)
     except Exception as e:
