@@ -1,9 +1,12 @@
 import pandas as pd
 import requests
+import os
+import time
+import yfinance as yf
 
-TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
-SYMBOL = "XAUUSD"
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+SYMBOL = "GC=F" # use GC=F for gold
 
 # V6 VIDYA STRATEGY - EXACT as 4182 trade
 SPREAD_BUFFER = 0.60
@@ -11,10 +14,8 @@ TP1_DIST = 6.0
 TP2_DIST = 11.0
 
 def vidya(close, period=20):
-    # BigBeluga VIDYA 20 20 1.5 close
     mom = close.diff(period)
     mom_abs = mom.abs().rolling(period).mean()
-    # simplified VIDYA
     alpha = 0.2
     v = close.ewm(alpha=alpha).mean()
     return v
@@ -24,38 +25,28 @@ def check_vidya_v6(df_5m):
     vidya_line = vidya(close)
     price = close.iloc[-1]
     vidya_val = vidya_line.iloc[-1]
-    
-    # 1. Must be BOUNCING from VIDYA, not breaking
-    # Previous candle below VIDYA, current above = reclaim
+
     was_below = close.iloc[-2] < vidya_line.iloc[-2]
     now_above = price > vidya_val
     if not (was_below and now_above):
         return None
-    
-    # 2. BOS confirmation - break last 5M high
+
     last_high = df_5m['high'].iloc[-10:-1].max()
     if price <= last_high:
         return None
-    
-    # 3. Delta filter - we want sell climax at support
-    # (Your screenshot: Sell 340 Buy 0 = ideal for long)
-    
-    # Calculate levels EXACT like I told you for 4182 trade
+
     entry = price + SPREAD_BUFFER
-    # SL = below sweep low + 0.5 buffer
     sweep_low = df_5m['low'].iloc[-5:].min()
     sl = sweep_low - 0.50
-    
-    # Don't allow SL > $10 (your bot SL was $8.6 to $14 now, too big)
+
     if (entry - sl) > 10:
         sl = entry - 9.5
-    
+
     tp1 = entry + TP1_DIST
     tp2 = entry + TP2_DIST
-    tp3 = df_5m['high'].iloc[-20:].max() + 1.5  # Next Liquidity
-    
-    # Block spam: Only if distance from last signal > 30 mins
-    msg = f"""🔥 GOLD ONANA BULLISH VIDYA BOUNCE + BOS
+    tp3 = df_5m['high'].iloc[-20:].max() + 1.5
+
+    msg = f"""🔥 GOLD VIDYA BOUNCE + BOS
 Reclaim {vidya_val:.2f}->{price:.2f} (V6)
 
 ✅ ENTRY: {entry:.2f} GOLD SPOT
@@ -71,7 +62,38 @@ No spam | 1 signal per bounce | No auto BE
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    try:
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+    except Exception as e:
+        print(f"Telegram error: {e}")
 
-# Your loop - replace get_data with your feed
-# if signal: send(signal)
+# --- BOT START ---
+print("V6 BOT STARTING")
+send("✅ V6 VIDYA BOT ONLINE - Fixed TOKEN - Waiting for 4182 bounce")
+
+last_signal_time = 0
+
+while True:
+    try:
+        df = yf.download(SYMBOL, period="2d", interval="5m", progress=False)
+        if len(df) < 30:
+            time.sleep(60)
+            continue
+
+        # flatten yfinance columns
+        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+        df.rename(columns={"Close":"close","High":"high","Low":"low"}, inplace=True)
+        df.columns = [c.lower() for c in df.columns]
+
+        signal = check_vidya_v6(df)
+        if signal:
+            now = time.time()
+            if now - last_signal_time > 1800: # 30 min anti-spam
+                send(signal)
+                last_signal_time = now
+                print("Signal sent")
+
+        time.sleep(60)
+    except Exception as e:
+        print(f"Loop error: {e}")
+        time.sleep(60)
